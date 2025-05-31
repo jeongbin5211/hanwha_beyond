@@ -204,3 +204,4 @@ scp C:\Users\Playdata\Desktop\NAVER.html test@10.10.10.123:\tmp\NAVER.html
 scp -r C:\Users\Playdata\Desktop\NAVER_files test@10.10.10.123:\tmp\NAVER.html
 
 월요일에 강사가 본인 집의 컴퓨터의 가상머신의 웹 서버로 접속할 수 있게 설정
+-> 172.30.1.9:250
