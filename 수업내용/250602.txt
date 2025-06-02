@@ -1,0 +1,255 @@
+리눅스에 프로그램 설치
+apt install 프로그램 이름
+
+서버 프로그램 실행
+systemctl start 서버 프로그램
+
+메모장 사용법 (vi 편집기)
+
+웹 서버 프로그램 (nginx)
+
+웹 서버(nginx) : 웹 서비스를 제공하는 프로그램
+
+웹 서비스 : 클라이언트가 요청한 파일을 다운로드 할 수 있게 해주는 서비스
+
+sw 공학
+	프로젝트 진행 : 계획 > 분석 > 설계 > 구현 > 테스트 > 유지보수
+	계획 ~ 설계 : 40%
+	구현 : 20%
+	유지보수 : 40%
+
+아키텍처 : sw아키텍쳐(MVC, Layered, Hex, MSA), 시스템 아키텍처(여러대의 서버를 어떻게 구성할건가)
+
+협업 : git, github
+
+3계층 아키텍처
+
+프론트엔드 서버, 어플리케이션 서버, 디비 서버 로 나눈 구조
+nginx/port 80 or 443	spring/port 8080			mariaDB port : 3306
+Vue.js			java, Aphach
+
+만약 nginx를 사용하지 않으면 뷰 소스코드를 전부 볼 수 있다.
+
+백엔드서버는 클라 한명이 요청하면 백엔드 서버 컴퓨터에서 요청 코드를 실행
+프론트엔드 서버는 클라 컴퓨터에서 요청 코드 실행
+따라서 백엔드서버가 과부하가 더 심함
+
+ssh 접속 : ssh teest@ip -p 포트번호
+
+3대의 가상머신 준비
+
+IP주소 설정
+
+vi /etc/netplan/00-installer.yaml
+
+haproxy - 부하 분산 프로그램(High Availability)
+
+핑확인 : ping 8.8.8.8 / ping www.naver.com
+
+첫번째 컴퓨터 설정
+
+1. apt update - 레포지토리 목록 갱신(최신 주소로 갱신)
+
+2. apt install haproxy
+
+3. systemctl start haproxy
+
+가용성 : Availability, 서버가 정상적으로 사용 가능한 정도
+
+고가용성 : High Availability, 서버가 죽어도 지속적으로 사용 가능하게 설계한 특성 - 서버 여러대 하면됨
+
+4.  HAProxy 설정
+vi /etc/haproxy/haproxy.cfg
+
+맨 마지막 줄에 다음 내용 추가
+
+listen stats
+    bind *:9000
+    mode  http
+    option dontlog-normal
+    stats enable
+    stats realm Haproxy\ Statistics
+    stats uri /stats
+
+-> 대쉬보드 화면을 설정하는것
+
+이후 haproxy를 재시작해야함 (systemctl restart haproxy)
+
+포트번호는 9000으로 지정했고 url은 ip주소:9000/stats -> stats uri /stats 이렇게 지정했기 때문
+
+팁 명령어 : 
+history - 명령어 기록 보기
+netstat -anpl : 실행 현황 보기
+
+두세번째 컴퓨터
+
+1. 레포지토리 목록 갱신
+
+2. nginx 설치
+apt install nginx
+
+3. 웹페이지 파일
+touch /var/www/html/test.html
+
+vi/var/www/html/test.html
+파일의 내용은 자유
+두세번째 컴퓨터의 내용이 서로 다르게
+
+4. nginx 실행
+systemctl restart nginx
+
+첫번째 컴터에 haproxy 설정 추가
+frontend webserver
+	bind *:80
+	mode http
+	default_backend nginx-server
+
+backend nginx-server
+	mode http
+	balance roundrobin
+	option httpchk GET /
+	server nginx1 192.168.110.152:80 check
+	server nginx2 192.168.110.153:80 check	
+
+5. HAproxy 설정 적용
+systemctl restart haproxy
+
+6. 확인 웹 브라우저(시크릿모드)로 http://192.168.110.151/test.html (haproxy 컴퓨터 ip로)
+
+HAProxy 서버 프로그램
+
+설치
+
+실행
+
+확인
+	systemctl status [서버이름]
+	포트 확인 netstat -anpl | grep 포트번호
+
+
+네번째 컴퓨터 세팅
+스프링부트 프로젝트 실행할 컴퓨터
+따라서 자바를 설치해야함
+apt install -y openjdk-17-jdk
+
+자바 설치 확인
+java --version
+
+환경변수 - 자바 경로 미리 잡기
+원래 ipconfig도 c:/~~/ipconfig 이런식임
+
+리눅스에서 패스환경변수 echo $PATH
+
+자바 경로 확인 : which java
+/usr/bin/java -> 이미 리눅스 패스환경변수에 등록되어있어서 java --version 만 입력해도 가능
+
+다섯번째 컴퓨터 세팅
+디비 서버 컴퓨터
+-> 마리아디비
+apt install -y mariadb-server
+
+2. mariadb 설정
+vi /etc/mysql/mariadb.conf.d/50-server.cnf
+27번 라인에 있는 설정을 다음처럼 변경
+bind-address = 0.0.0.0
+만약 사설ip주소로 설정하면 같은 공유기에서만 접속 가능한 상태가 됨
+
+바인드 주소 : 내컴퓨터의 ip주소랑 포트번호를 묶어놓는다는 의미
+
+127.0.0.1:80 내 컴퓨터를 의미 - 로컬에서만 접속 가능
+0.0.0.0 모든 ip주소
+
+3. mariadb 실행
+systemctl restart mariadb
+
+4. mariadb 실행 확인
+systemctl status mariadbd
+apt install -y net-tools
+netstat -anpl | grep 3306
+
+ps -ef | grep mariada - 프로그램이 실행중인가?
+netstat -anpl 
+
+mariadb - mariadb 시작됨
+
+5. mariadb 초기 설정
+mysql_secure_installation
+없으니까 엔터
+n
+Y - 비번 변경
+Y
+Y
+Y
+Y
+mariadb -root -p
+
+mysql 워크벤치 본컴에 설치
+
+6. 사용자 추가 및 DB 생성
+mariadb -u root -p
+	create database web;
+	create user 'hjb'@'%' identified by 'qwer1234';
+	select user, host from mysql user;
+	grant all privileges on web.* to 'hjb'@'%';
+	flush privileges;
+
+워크벤치에 db연결
+db서버 컴퓨터 ip를 host,
+user 는 hjb
+비번은 qwer1234
+
+네번째 컴퓨터에 백엔드 서버 프로젝트 다운로드
+wget http://222.112.28.162:10000/back%2d0.0.1%2dSNAPSHOT.jar
+wget http://192.0.0.100:10000/back%2d0.0.1%2dSNAPSHOT.jar
+
+export DB_URL=jdbc:mariacdb://내 디비 host/web
+export DB_USERNAME=hjb
+export DB_PASSWORD=qwer1234
+
+백엔드 서버 실행
+java -jar back-0.0.1-SNAPSHOT.jar
+
+이후
+
+윈도우에서 접속
+	workbench 설치 및 실행
+
+	서버 접속 후
+	
+INSERT INTO `web`.`user`
+(`email`,
+`name`)
+VALUES
+('test01@test.com','test01'),
+('test02@test.com','test02'),
+('test03@test.com','test03'),
+('test04@test.com','test04');
+
+두,세번째컴퓨터에서 프론트 배포
+cd /var/www/html
+
+wget http://222.112.28.162:10000/dist.zip
+
+apt install unzip
+
+unzip dist.zip
+
+리버스 프록시 설정
+vi /etc/nginx/sites-enabled/default
+
+location /api/ {
+                rewrite ^/api(/.*)$ $1 break; 
+                proxy_pass http://192.168.110.154:8080; # 백엔드 서버 주소와 포트
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                proxy_set_header Host $host;
+                proxy_cache_bypass $http_upgrade;
+        }	
+
+nginx 재실행
+systemctl restart nginx
+
+이후 1번컴퓨터ip로 접속해서 확인
+
+
