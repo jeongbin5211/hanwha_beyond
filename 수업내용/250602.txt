@@ -109,7 +109,7 @@ backend nginx-server
 	balance roundrobin
 	option httpchk GET /
 	server nginx1 192.168.110.152:80 check
-	server nginx2 192.168.110.153:80 check	
+	server nginx2 192.168.110.153:80 check		
 
 5. HAproxy 설정 적용
 systemctl restart haproxy
@@ -163,11 +163,11 @@ bind-address = 0.0.0.0
 systemctl restart mariadb
 
 4. mariadb 실행 확인
-systemctl status mariadbd
+systemctl status mariadb
 apt install -y net-tools
 netstat -anpl | grep 3306
 
-ps -ef | grep mariada - 프로그램이 실행중인가?
+ps -ef | grep mariadb - 프로그램이 실행중인가?
 netstat -anpl 
 
 mariadb - mariadb 시작됨
@@ -189,7 +189,7 @@ mysql 워크벤치 본컴에 설치
 mariadb -u root -p
 	create database web;
 	create user 'hjb'@'%' identified by 'qwer1234';
-	select user, host from mysql user;
+	select user, host from mysql.user;
 	grant all privileges on web.* to 'hjb'@'%';
 	flush privileges;
 
