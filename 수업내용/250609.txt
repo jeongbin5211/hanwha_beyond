@@ -1,0 +1,269 @@
+우분투 리눅스 가상머신 1대 준비
+
+1. DB 서버 설치
+ip 설정 후 
+apt update
+apt install -y mariadb-server
+
+2. mariadb 설정
+vi /etc/mysql/mariadb.conf.d/50-server.cnf
+bind-address = 0.0.0.0
+
+3. mariadb 실행
+systemctl start mariadb
+
+4. mariadb 실행 확인
+systemctl status mariadb
+apt install -y net-tools
+netstat -anlp | grep 3306
+
+5. mariadb 초기 설정
+mysql_secure_installation
+엔터
+n
+y
+qwer1234
+qwer1234
+y
+y
+y
+y
+
+6. 계정 추가
+이 상태에서 워크밴치에서 연결하려면 안됨 -> 로컬에서만 허용하는 유저밖에 없어서
+
+mariadb -u root -p
+create user 'hjb'@'%' identified 'qwer1234';
+grant all privileges on *.* to 'hjb'@'%';
+flush privileges;
+
+7. erd 그리기
+
+DBMS 필수 기능 3가지
+정의 기능
+조작 기능
+제어 기능
+
+create database ex1;
+
+DML - CREATE, ALTER, DROP
+
+CREATE TABLE 테이블명 (
+	속성이름 타입,
+	속성이름 타입,
+	옵션
+);
+
+use ex1;
+
+CREATE TABLE user(
+    idx int auto_increment not null,
+    email varchar(50) not null unique,
+    name varchar(20) not null,
+    profile_image varchar(100) default 'default.png',
+    password varchar(200),
+    primary key (email)
+);
+
+속성 추가
+alter table user add profile_image2 varchar(100);
+
+속성 제거
+alter table user drop profile_image2;
+
+속성 이름 변경
+ALTER TABLE user RENAME COLUMN name to nickname;
+
+속성의 옵션 변경
+ALTER TABLE user MODIFY nickname varchar(50);
+
+테이블 삭제
+DROP TABLE user;
+
+DML - 데이터를 CRUD할 때 사용(SELECT, INSERT, UPDATE, DELETE)
+
+sakila github에서 프로젝트 다운
+mysql schema, insert data 사용
+server - data import - import from self-contained file 후 스키마 선택 - start import
+insert data도 똑같이 진행
+
+SELECT 속성명 FROM 테이블명 WHERE 조건;
+
+select film_id, title, length from film where length >= 120 and length < 150;
+
+select * from film where title = 'AFRICAN EGG';
+
+select * from film where title like '%EGG%';
+select * from film where title like 'EGG%';
+select * from film where title like '%EGG';
+
+# 709번 영화를 빌려간 내역을 조회
+
+내가 쓴 sqls
+select * from payment where rental_id IN (select rental_id from rental where inventory_id IN (select inventory_id from inventory where film_id = 709));
+
+select * from payment 
+inner join rental 
+on payment.rental_id = rental.rental_id
+inner join inventory
+on rental.inventory_id = inventory.inventory_id
+where film_id = 709; 
+
+JOIN
+
+INNER JOIN 과 LEFT JOIN 정리하기
+
+# 결제 금액이 5달러 이상인 영화의 제목을 조회
+select film.title from payment
+inner join rental
+on payment.rental_id = rental.rental_id
+inner join inventory
+on rental.inventory_id = inventory.inventory_id
+inner join film
+on inventory.film_id = film.film_id
+where payment.amount >= 5;
+
+#카테고리가 action인 영화 제목 조회(category, film_category, film)
+select title from film
+inner join film_category
+on film.film_id = film_category.film_id
+inner join category
+on film_category.category_id = category.category_id
+where category.name = 'Action';
+
+Database 메뉴에 Reverse Engineer Database -> 데이터를 다시 그려줌
+
+# order by
+select * from rental order by return_date;
+select * from rental order by return_date ASC; 오름차순
+select * from rental order by return_date DESC; 내림차순
+select * from rental order by return_date DESC, rental_id ASC;
+
+# 없어진 기록 찾기
+내가 푼 SQL
+SELECT ANIMAL_ID, NAME FROM ANIMAL_OUTS
+WHERE ANIMAL_ID NOT IN (SELECT ANIMAL_ID FROM ANIMAL_INS)
+ORDER BY ANIMAL_ID;
+
+SELECT ANIMAL_OUTS.ANIMAL_ID, ANIMAL_OUTS.NAME FROM ANIMAL_OUTS
+LEFT JOIN ANIMAL_INS
+ON ANIMAL_OUTS.ANIMAL_ID = ANIMAL_INS.ANIMAL_ID
+WHERE ANIMAL_INS.ANIMAL_ID IS NULL
+ORDER BY ANIMAL_ID;
+
+# 2005년 5월 26일에 빌려간 정보 조회 
+SELECT * FROM rental where rental_date like '2005-05-26%';
+
+# 현재 시간보다 20년 이전 데이터 이후만 조회 
+SELECT * FROM rental WHERE rental_date > NOW() - INTERVAL 20 YEAR;
+
+# 6월에 대한 데이터 - 날짜 비교는 부등호도 가능하다 
+SELECT * FROM rental where rental_date like '2005-06%';
+
+SELECT * FROM rental WHERE rental_date > '2005-06-01 00:00:00' AND rental_date < '2005-06-30 23:59:59';
+
+# 출력 포멧 다르게 하기 Y M/m d H i s
+SELECT rental_date, date_format(rental_date, '%Y %m월 %d %h시 %i분 %s초') from rental;
+
+SELECT rental_date, date_format(rental_date, '%Y %m월 %d %h시 %i분 %s초') AS 년월일시분초 from rental;
+
+# 조건에 부합하는 중고거래 댓글 조회하기
+SELECT b.TITLE, b.BOARD_ID, r.REPLY_ID, r.WRITER_ID, r.CONTENTS, DATE_FORMAT(r.CREATED_DATE, '%Y-%m-%d') AS CREATED_DATE
+from USED_GOODS_BOARD AS b
+INNER JOIN USED_GOODS_REPLY AS r
+ON b.BOARD_ID = r.BOARD_ID
+WHERE b.CREATED_DATE LIKE '2022-10%'
+ORDER BY r.CREATED_DATE ASC, b.TITLE;
+
+# GROUP BY로 묶어서 조회 - 보통 집계함수와 함께 사용(count, sum, avg 등)
+select count(film.title), category.name from category
+inner join film_category
+on category.category_id = film_category.category_id
+inner join film
+on film_category.film_id = film.film_id
+GROUP BY category.name;
+
+# 각 도시별 고객의 수를 조회
+select * from address;
+select * from customer;
+select * from city;
+
+select count(customer.customer_id) AS '도시별 고객 수', address.city_id from address
+inner join customer
+on address.address_id = customer.address_id
+group by city_id
+having count(customer.customer_id) > 1; 
+
+여기서 having은 집계 결과에 대한 조건을 걸 때 사용
+
+# 카테고리 별 도서 판매량 집계하기
+
+# 조건에 맞는 사용자와 총 거래금액
+
+# 특정 조건을 만족하는 물고기별 수와 최대 길이 구하기
+select count(id) AS 'FISH_COUNT', max(length) AS 'MAX_LENGTH', fish_type from fish_info
+group by fish_type
+having avg(
+    ifnull(length, 10)
+) >= 33
+order by fish_type ASC;
+
+# 제일 요금을 많이 낸 결제 내역 조회 (limit 문법)
+select * from payment
+order by amount desc
+limit 1;
+
+# 가장 최근에 반납한 rental 내역 1개 조회
+select * from rental
+order by return_date desc
+limit 1;
+
+# 어디서부터 어디까지 - limit 10, 5; 11번째부터 5개
+# 11번째부터 5개 조회
+select * from payment
+order by amount desc
+limit 10, 5;
+
+#게시글이 100개 있을 때 첫 페이지에서 10개를 보여줄 때 
+select * from payment
+limit 10, 10;
+
+#게시글이 100개 있을 때 2 페이지에서 10개를 보여줄 때 
+select * from payment
+limit 20, 10;
+
+#게시글이 100개 있을 때 3 페이지에서 10개를 보여줄 때 
+select * from payment
+limit 30, 10;
+
+#IN문법 - ()에 있는 값들만 조회할 때 -> 속도가 느리기 때문에 어지간하면 join을 사용하자 
+select rental_id from rental where rental_id IN (select rental_id from payment);
+
+# 평균 결제 금액을 구하는 쿼리
+select avg(amount) from payment;
+
+# 평균 결제 금액인 4.2보다 결제 금액이 더 큰 결제 내역 조회
+select * from payment where amount >= 4.2;
+
+# 위 두 쿼리를 하나로 합쳐서 실행
+select * from payment where amount >= (select avg(amount) from payment);
+
+# 중복 제거 - DISTINCT
+select DISTINCT customer_id from payment;
+
+# 상품을 구매한 회원 비율 구하기
+
+# INSERT
+insert into rental (rental_date, inventory_id, customer_id, staff_id) value ('2025-06-09 17:12:00' , 367, 359, 1);
+
+insert into rental (rental_date, inventory_id, customer_id, staff_id) values 
+('2025-06-09 17:12:01' , 367, 359, 1),
+('2025-06-09 17:12:02' , 367, 359, 1),
+('2025-06-09 17:12:03' , 367, 359, 1),
+('2025-06-09 17:12:04' , 367, 359, 1);
+
+# UPDATE
+update rental set customer_id = 159 where rental_id = 1;
+
+# DELETE - edit - preferences - sql editor - 마지막 옵션 체크 해제하면 됨
+DELETE FROM rental;
