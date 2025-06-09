@@ -33,7 +33,7 @@ y
 이 상태에서 워크밴치에서 연결하려면 안됨 -> 로컬에서만 허용하는 유저밖에 없어서
 
 mariadb -u root -p
-create user 'hjb'@'%' identified 'qwer1234';
+create user 'hjb'@'%' identified by 'qwer1234';
 grant all privileges on *.* to 'hjb'@'%';
 flush privileges;
 
