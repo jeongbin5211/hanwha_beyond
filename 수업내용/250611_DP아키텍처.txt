@@ -1,0 +1,408 @@
+apt 프로그램 설치 명령어
+
+systemctl 실행
+
+systemctl enable 서버이름 : 재부팅 시 자동으로 켜짐
+
+컴퓨터의 이름 ex) root@test 의 test 변경
+- vi /etc/hostname 컴퓨터의 이름을 설정
+
+재부팅 : init 6
+
+db1			mariadb, prometheus-node-exporter, mysql_exporter(cd mysqld_exporter-0.17.2.linux-amd64)
+prometheus	prometheus, prometheus-node-exporter
+grafana		grafana-server
+
+각 서버 컴퓨터에 해당되는 프로그램을 시작
+
+prometheus의 ip:9090
+grafana의 ip:3000 -> 대시보드에서 12062 추가 import (prometheus-node-exporter의 대시보드)
+
+JMeter
+
+CPU							1		1		1		1		4		4		4
+RAM							1		1		1		1		4		4		4
+
+JDBC Connection Counfiguration
+Max Number of Connections			1		100		1		100		1		100		50
+
+Thread Group	
+Number of Threads				1000		1000		1000		1000		1000		1000		1000
+Loop Count					1		1		100		100		100		100		100
+
+AVG							215		412		339		136		351		33		30
+tlme															40s		4s
+
+이후 db컴퓨터의 성능 업그레이드 
+processors 2 / 2 , memory 4GB
+
+컨텍스트 스위칭??
+
+부하테스트를 해본점 어필 가능 
+무지성으로 Max Number of Connections를 늘리는게 좋은게 아님
+상황 따라서 (ex : 배민은 점심에 피크인데 그걸 테스트) 저렇게 설정해서 테스트를 했다
+
+재부팅시 자동 실행
+systemctl enable 서버이름
+
+여기서 systemctl
+
+윈도우에서 프로그램 실행은 더블클릭으로 한다. - 리눅스에서는 파일경로를 입력
+윈도우의 서버 프로그램 실행 - 서비스에서 실행 - systemctl은 윈도우로 치면 서비스에 등록되어있는 프로그램만 실행가능하다.
+
+리눅스의 서비스
+vi /etc/systemd/system/multi-user.target.wants/mariadb.service
+/root/mysqld_exporter-0.17.2.linux-amd64
+
+컴퓨터 이름 수정
+/etc/hostname 파일 내용 수정
+
+
+성능 개선
+
+1. SQL 쿼리 성능 측정 및 수정
+
+2. 서버 다중화
+
+서버 다중화
+
+db서버를 여러대 준비할 때 크게 두방식이 있다.
+
+레플리케이션
+- 마스터라는 중앙서버가 있고 여기에 데이터를 저장 (읽기, 쓰기 담당)
+- 슬레이브가 여러대 있음 얘가 데이터 수집, 전달 (읽기만 담당)
+
+단점 : 마스터가 죽으면 쓰기가 안됨
+단점을 보완하기위해서 마스터이자 슬레이브를 두고 슬레이브이자 마스터를 두어서 운영
+
+보통 쓰기작업보단 읽기작업이 많은 서비스에 이용
+ex) 인스타, 쇼핑몰
+
+클러스터링
+- 동등한 여러 서버를 같이 구성
+- 전부 쓰기, 읽기 작업이 가능
+- 쓰기 작업이 많은 서비스에 이용
+
+DR(재난 복구)
+재해복구시스템
+미러 사이트	: 주 센터와 동일한 수준의 데이터와 시스템을 원격지에 구축
+				주 센터도 실행중(Active)으로 두고 원격 센터도 실행중(Active)로 둔다.
+핫 사이트		: 주 센터와 동일한 수준의 데이터와 시스템을 원격지에 구축
+				주 센터도 실행중(Active)으로 두고 원격 센터도 대기중(Stand-by)로 둔다.
+				-> 주 센터가 죽으면 원격 센터 가동됨
+웜 사이트		: 주 센터와 동일한 수준의 데이터만 준비
+				주 센터 Active
+콜드 사이트	: 최소한의 준비만 해두는 것
+
+미러 사이트는 haproxy로 경험해봤다
+
+DB서버 레플리케이션 설정하기
+
+가상 머신 2개 추가 준비
+1대 마리아디비 설치
+1대 Haproxy 설치
+sudo rm /var/lib/apt/lists/lock
+sudo rm /var/cache/apt/archives/lock
+sudo rm /var/lib/dpkg/lock*
+
+추가한 마리아디비 머신에 데이터 백업 및 복구
+1. DB1 컴퓨터에서 데이터 백업
+
+mysqldump -u root -p --all-databases > backup.sql
+
+2. DB1 컴퓨터에서 백업 파일을 DB2로 복사
+
+scp ./backup.sql test@192.168.110.40:/tmp/backup.sql
+
+3. DB2 컴퓨터에서 데이터 복구
+
+mariadb -u root -p < /tmp/backup.sql
+
+mariadb -u root -p
+
+4. 레플리케이션 설정
+----------------------------
+	DB1 컴퓨터
+----------------------------
+(1). 1번 컴퓨터를 마스터로 설정
+	vi /etc/mysql/mariadb.conf.d/50-server.cnf
+	[mariadb]				109번 라인에 위치
+	log-bin				모든걸 bin(binary 2진수) 로그로 기록하겠다.
+	server_id=1				서버 구분값
+	log-basename=master1	저장되는 로그 파일 명 설정
+	binlog-format=mixed		저장되는 로그 형식 설정 - 공홈에서 추천하는 방식으로 그냥함
+
+	systemctl restart mariadb
+
+(2). master 확인
+mariadb -u root -p
+show master status;
+파일명(file) 나오고 얼만큼 로그를 저장했는지(position) 나옴
+
+(3) master 서버에 사용자 추가 및 권한 설정
+CREATE USER 'slave_user_1'@'%' IDENTIFIED BY 'qwer1234';
+GRANT REPLICATION SLAVE ON *.* TO 'slave_user'@'%';
+FLUSH PRIVILEGES;
+
+----------------------------
+	DB2 컴퓨터
+----------------------------
+(1) DB 서버 설정
+	vi /etc/mysql/mariadb.conf.d/50-server.cnf
+		[mariadb]	<- 이거는 추가하는거 아님
+		server_id=2
+
+
+	systemctl restart mariadb
+
+  (2) Master 지정
+	mariadb -u root -p
+		CHANGE MASTER TO
+		  MASTER_HOST='[Master 서버 IP]',
+		  MASTER_USER='slave_user',
+		  MASTER_PASSWORD='qwer1234',
+		  MASTER_PORT=3306,
+		  MASTER_LOG_FILE='[마스터에서 show master status 했을 때 File 이름]',
+		  MASTER_LOG_POS=[마스터에서 show master status 했을 때 position 번호],
+		  MASTER_CONNECT_RETRY=10;
+
+CHANGE MASTER TO
+MASTER_HOST='192.168.110.40',
+MASTER_USER='slave_user_2',
+MASTER_PASSWORD='qwer1234',
+MASTER_PORT=3306,
+MASTER_LOG_FILE='master2-bin.000002',
+MASTER_LOG_POS=938,
+MASTER_CONNECT_RETRY=10;
+
+
+		START SLAVE;
+
+		
+  (3) Slave 확인
+	SHOW SLAVE STATUS\G
+		Slave_IO_Running: Yes	
+		Slave_SQL_Running: Yes
+
+
+1. 마스터에서 데이터 저장
+2. 마스터에서 로그에 기록
+3. 슬레이브가 로그의 기록을 확인
+4. 슬레이브가 업데이트된 로그의 내역대로 슬레이브에 데이터 저장
+
+위에서 구현한 아키텍처를 미러사이트로 운영해봅시다.
+2번 컴퓨터 설정에 
+	log-bin				모든걸 bin(binary 2진수) 로그로 기록하겠다.
+	server_id=1				서버 구분값
+	log-basename=master1	저장되는 로그 파일 명 설정
+	binlog-format=mixed		저장되는 로그 형식 설정 - 공홈에서 추천하는 방식으로 그냥
+
+추가
+
+서로가 서로의 마스터 겸 슬레이브가 되는것을 구현하면 됨
+
+----------------------------
+	DB1 컴퓨터
+----------------------------
+    (1) master 설정
+	vi /etc/mysql/mariadb.conf.d/50-server.cnf
+		[mariadb]	<- 이거는 추가하는거 아님, 이거는 109번 라인에 있음
+		log-bin
+		server_id=1
+		log-basename=master1
+		binlog-format=mixed	
+
+	systemctl restart mariadb
+
+    (2) master 확인
+	mariadb -u root -p
+		show master status;
+
+    (3) master 서버에 사용자 추가 및 권한 설정
+	CREATE USER 'slave_user'@'%' IDENTIFIED BY 'qwer1234';
+	GRANT REPLICATION SLAVE ON *.* TO 'slave_user'@'%';
+	FLUSH PRIVILEGES;
+
+----------------------------
+	DB2 컴퓨터
+----------------------------
+    (1) DB 서버 설정
+	vi /etc/mysql/mariadb.conf.d/50-server.cnf
+		[mariadb]	<- 이거는 추가하는거 아님
+		server_id=2
+
+
+	systemctl restart mariadb
+
+    (2) Master 지정
+	mariadb -u root -p
+		CHANGE MASTER TO
+		  MASTER_HOST='[Master 서버 IP]',
+		  MASTER_USER='slave_user',
+		  MASTER_PASSWORD='qwer1234',
+		  MASTER_PORT=3306,
+		  MASTER_LOG_FILE='[마스터에서 show master status 했을 때 File 이름]',
+		  MASTER_LOG_POS=[마스터에서 show master status 했을 때 position 번호],
+		  MASTER_CONNECT_RETRY=10;
+
+
+		START SLAVE;
+
+		
+    (3) Slave 확인
+	SHOW SLAVE STATUS\G
+		Slave_IO_Running: Yes	
+		Slave_SQL_Running: Yes
+
+--------------------------------------------------------------------------------------------------------------
+		설정이 잘 못됐을 때
+--------------------------------------------------------------------------------------------------------------
+
+  1) 슬레이브 중지
+	STOP SLAVE;
+	RESET SLAVE;
+
+  2) 데이터 백업 및 복구
+
+
+  3) Master 지정
+	CHANGE MASTER TO
+	  MASTER_HOST='[Master 서버 IP]',
+	  MASTER_USER='slave_user',
+	  MASTER_PASSWORD='qwer1234',
+	  MASTER_PORT=3306,
+	  MASTER_LOG_FILE='[마스터에서 show master status 했을 때 File 이름]',
+	  MASTER_LOG_POS=[마스터에서 show master status 했을 때 position 번호],
+	  MASTER_CONNECT_RETRY=10;
+
+
+	START SLAVE;
+
+
+Haproxy 로 미러사이트 구현
+
+HAProxy로 미러사이트 구성
+    (1) HAProxy 설치
+	apt update
+	apt install haproxy
+
+    (2) HAProxy에 부하 분산 설정
+	vi /etc/haproxy/haproxy.cfg 
+
+	맨 마지막 줄에 다음 내용 추가
+listen stats
+    bind *:9000
+    mode  http
+    option dontlog-normal
+    stats enable
+    stats realm Haproxy\ Statistics
+    stats uri /stats
+
+frontend dbserver
+  bind *:3306
+  mode tcp
+  default_backend mariadb_backend
+
+backend mariadb_backend
+	mode tcp
+	option mysql-check user haproxy
+	server db1 192.168.110.18:3306 check
+	server db2 192.168.110.40:3306 check backup
+
+HAProxy 설정 적용
+	systemctl restart haproxy
+
+db1 계정 haproxy 만들어서 모든 권한 주기
+
+설정 끝나면 클라이언트를 워크벤치로 해서 실행
+
+show variables like 'server_id' 로 서버 id를 확인해보기
+
+핫 사이트 구성해보기
+db1, 2 둘 다 스냅샷으로 돌리기
+
+keepalived를 활용한 DR 구성
+- 한쪽 db가 죽으면 해당 db의 ip주소를 다른 db로 넘겨줘서 재난을 방지해줌
+- 설정 중 몇초마다 systemctl is-active mariadb를 해서 살아있는지 죽었는지 판단.
+
+양쪽다 apt install -y keepalived
+1번 서버를 active로 사용
+우선순위는 백업용 db가 낮아야함
+
+3. keepalived를 활용한 DR 구성
+  1) 1번 컴퓨터
+    (1) keepalived 설치
+	apt install -y keepalived
+
+    (2) keepalived 설정파일 생성
+	 vi /etc/keepalived/keepalived.conf
+
+global_defs {
+    router_id node01
+    enable_script_security
+    script_user root
+}
+
+vrrp_script track_mariadb {
+    script "systemctl is-active mariadb"
+    interval 5
+    fall 4
+    rise 2
+}
+
+vrrp_instance VRRP1 {
+    state MASTER
+    interface ens33
+    virtual_router_id 101
+    priority 200
+    advert_int 1
+    virtual_ipaddress {
+        10.10.10.200/24
+    }
+
+    track_script {
+        track_mariadb 
+    }
+}
+
+
+
+
+  2) 2번 컴퓨터
+    (1) keepalived 설치
+	apt install -y keepalived
+
+
+    (2) keepalived 설정파일 생성
+	 vi /etc/keepalived/keepalived.conf
+
+global_defs {
+    router_id node02
+    enable_script_security
+    script_user root
+}
+
+vrrp_script track_mariadb {
+    script "systemctl is-active mariadb"
+    interval 5
+    fall 4
+    rise 2
+}
+
+vrrp_instance VRRP1 {
+    state BACKUP
+    interface ens33
+    virtual_router_id 101
+    priority 100
+    advert_int 1
+    virtual_ipaddress {
+        10.10.10.200/24
+    }
+
+    track_script {
+        track_mariadb
+    }
+}
+
+
+
