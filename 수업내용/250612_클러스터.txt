@@ -1,0 +1,273 @@
+클러스터링 - 최소 3대가 필요
+
+3명이서 동시에 읽고쓰기 가능
+
+나 지금 뭐 저장한다? 너네 저장 가능 상태야? ㅇㅇ가능! 저장
+서로 동의가 되어야 쓰기가 가능 - 3대가 동시에 저장
+
+1. 설정
+
+galera
+
+
+0. DB 서버 클러스터링이란?
+	MySQL/MariaDB용 동기식 멀티‑마스터 구성 방식
+	모든 노드에서 읽기·쓰기 가능
+	트랜잭션 레벨의 동기식 복제 (Certification‑based)
+	자동 노드 가입, 제거
+	자동 충돌 감지 및 롤백
+
+1. DB 설치 및 초기 설정 (3대 모두 똑같이)
+  0) 가상머신 준비
+			cpu	ram
+	db1		1	1
+	db2		1	1
+	db3		1	1
+
+  1) 설치
+	apt update
+	apt install -y mariadb-server
+
+  2) mariadb 바인드 주소 설정
+	vi /etc/mysql/mariadb.conf.d/50-server.cnf
+	27번 라인에 있는 설정을 다음처럼 변경
+	bind-address            = 0.0.0.0
+
+  3) mariadb 실행
+	systemctl restart mariadb
+
+  4) mariadb 실행 확인
+	systemctl status mariadb
+	apt install -y net-tools
+	netstat -anlp | grep :3306	
+
+  5) DB 서버 초기화
+	 mysql_secure_installation
+		엔터
+		엔터
+		엔터
+		qwer1234
+		qwer1234
+		엔터
+		엔터
+		엔터
+		엔터
+
+
+
+
+
+2. 클러스터 설정
+  1) 서버 중지
+	systemctl stop mariadb
+
+  2) 설정 추가(3대 중 1대만 먼저 설정)
+	vi /etc/mysql/mariadb.conf.d/50-server.cnf
+	마지막 줄에 다음 내용 추가
+[galera]
+wsrep_on=ON
+wsrep_provider=/usr/lib/galera/libgalera_smm.so
+wsrep_cluster_address="gcomm://"
+binlog_format=row
+default_storage_engine=InnoDB
+innodb_autoinc_lock_mode=2
+bind-address=0.0.0.0
+wsrep_cluster_name="MariaDB_Cluster"	# 3대의 컴퓨터를 묶었을 때 내가 지어줄 이름
+wsrep_node_address="10.10.10.101"	# 현재 컴퓨터의 IP 주소
+
+
+	systemctl restart mariadb
+
+  2) 클러스터 구성 실행(3대 중 1대만 먼저 설정)
+	galera_new_cluster
+
+
+  3) 나머지 서버 설정
+	systemctl stop mariadb
+
+	vi /etc/mysql/mariadb.conf.d/50-server.cnf
+	마지막 줄에 다음 내용 추가
+[galera]
+wsrep_on=ON
+wsrep_provider=/usr/lib/galera/libgalera_smm.so
+wsrep_cluster_address="gcomm://10.10.10.101,10.10.10.102,10.10.10.103"
+binlog_format=row
+default_storage_engine=InnoDB
+innodb_autoinc_lock_mode=2
+bind-address=0.0.0.0
+wsrep_cluster_name="MariaDB_Cluster"	# 3대의 컴퓨터를 묶었을 때 내가 지어줄 이름
+wsrep_node_address="10.10.10.102"	# 현재 컴퓨터의 IP 주소
+
+
+	systemctl restart mariadb
+
+  4) 설정 변경(3대 중 1대만 먼저 설정)
+	vi /etc/mysql/mariadb.conf.d/50-server.cnf
+		wsrep_cluster_address="gcomm://10.10.10.101,10.10.10.102,10.10.10.103"
+
+
+  5) 최종 확인
+	mariadb -u root -p
+	show status like 'wsrep_cluster_status';
+		모든 노드에서 Primary
+	
+	show status like 'wsrep_cluster_size';
+		모든 노드에서 클러스터의 총 노드 수(3)
+
+	show status like 'wsrep_local_state_comment';
+		모든 노드에서 Synced
+
+
+wsrep_cluster_address="gcomm://10.10.10.101,10.10.10.102,10.10.10.103" 에 대한 설명
+첫번째 설정때는 안적었는데 이는 물어볼 친구가 없어서 그렇다.
+
+
+3. 클러스터에서 사용되는 용어
+	IST : Incremental State Transfer, 노드가 클러스터에서 잠시 이탈했다가 복귀할 때, 변경된 데이터만 복사받는 방식
+	SST : State Snapshot Transfer, 클러스터에 새로운 노드가 들어올 때 전체 데이터를 "스냅샷"처럼 복사해서 보내주는 과정
+		클러스터에 새 노드 추가되거나 장애 노드가 재시작될 때 기존 데이터와 차이가 오래된 경우 수행됨
+	쿼럼 : 몇 개의 노드가 살아있어야 클러스터가 안전하다고 볼 것인가?를 결정하는 기준
+		ex) 3개 중 2개 살아있음(클러스터 유지 가능), 3개 중 1개만 살아있음(non-Primary 상태 -> 서비스 중단)
+
+4. 쿼럼 유지 실패(과반수 이상이 다운된 상황)
+  1) 남아있는 모든 서버 중지
+	systemctl stop mariadb
+
+  2) 남아있던 컴퓨터 중에 1대 설정
+	vi /var/lib/mysql/grastate.dat
+		safe_to_bootstrap: 0 -> safe_to_bootstrap: 1
+
+	
+	vi /etc/mysql/mariadb.conf.d/50-server.cnf
+		wsrep_cluster_address="gcomm://"
+
+
+	systemctl start mariadb
+
+	galera_new_cluster
+
+
+  
+  3) 나머지 2대 다시실행
+	systemctl restart mariadb
+
+  4) 남아있던 컴퓨터 중에 1대 설정 복구
+	 
+		wsrep_cluster_address="gcomm://10.10.10.101,10.10.10.102,10.10.10.103"
+
+	systemctl restart mariadb
+
+	
+	
+	*리눅스에서 로그 보기 : tail -f /var/log/syslog
+
+
+haproxy 설정
+
+vi /etc/haproxy/haproxy.cfg
+
+listen stats
+        bind *:9000
+        mode  http
+        option dontlog-normal
+        stats enable
+        stats realm Haproxy\ Statistics
+        stats uri /stats
+
+frontend dbserver
+        bind *:3306
+        mode tcp
+        default_backend mariadb_backend
+
+backend mariadb_backend
+        mode tcp
+        option mysql-check user haproxy
+        server db1 192.168.110.81:3306 check
+        server db2 192.168.110.82:3306 check
+        server db3 192.168.110.83:3306 check
+
+모든 db에 원격 접속 가능한 루트계정 생성
+create user 'root'@'%' identified by 'qwer1234';
+grant all privileges on *.* to 'root';
+flush privileges;
+
+모든 db에 haproxy유저 생성
+
+이후 워크벤치 연결, http://192.168.110.41:9000/stats 에서 모니터링
+
+1번 db stop
+2번에서 db생성 및 확인
+3번에서 db확인
+1번을 킨다.
+1번에서 db확인
+
+	mariadb -u root -p
+	show status like 'wsrep_cluster_status';
+		모든 노드에서 Primary
+	
+	show status like 'wsrep_cluster_size';
+		모든 노드에서 클러스터의 총 노드 수(2)
+
+	show status like 'wsrep_local_state_comment';
+		모든 노드에서 Synced
+
+이후 create database
+
+다시 1번 컴터 start mariadb 하면 IST 발생 - 그래서 조금 느리게 시작
+
+1번, 2번 컴퓨터를 끄고 3번에서 상태확인을 해보기
+
+show status like 'wsrep_cluster_status';
+	모든 노드에서 non-Primary
+	
+show status like 'wsrep_cluster_size';
+	모든 노드에서 클러스터의 총 노드 수(1)
+
+show status like 'wsrep_local_state_comment';
+	모든 노드에서 Initialized
+
+-> 쿼럼 유지 실패 (과반수 이상이 다운된 상황)
+1. 남아있는 모든 서버 중지
+systemctl stop mariadb
+
+2. 남아있던 컴퓨터 중 1대 설정
+vi /var/lib/mysql/grastate.dat
+	safe_to_bootstrap: 0 -> 1로 변경 
+
+vi /etc/mysql/mariadb.conf.d/50-server.cnf
+	wsrep_cluster_address="gcomm://"
+
+systemctl start mariadb
+
+galera_new_cluster
+
+3. 시작 컴퓨터가 뻗는 상황을 대비해서 
+vi /etc/mysql/mariadb.conf.d/50-server.cnf
+	wsrep_cluster_address="gcomm://" -> 수정
+
+리눅스의 은총알
+ls -l /var/log/syslog - 어떤 프로그램이든 이곳에 로그를 저장
+
+tail -f /var/log/syslog - 계속 파일을 조회 - 문제가 생기면 올라옴
+
+
+레플리케이션, 클러스터링 처럼 아키텍처를 선택할 때 고려사항
+
+1. 트래픽 규모 고려
+2. 편의성 고려
+3. 확장성 고려
+
+보편적으로 레플리케이션은 읽기가 많을때 사용
+
+							  MSA
+서버 1대 -> 레플리케이션 -> 클러스터링 -> CQRS -> DB per Service -> 전용 DB(NoSQL 사용)
+
+3대 5대 처럼 홀수인 이유  : 과반수 때문
+짝수면 무승부가 나올 수 있다. 찬성 2 반대 2처럼
+
+
+아키텍처 실습
+
+VM을 Bridged로 진행 -> 가상 공유기가 아닌 찐 공유기를 이용함
+
+log_slave_update - 2계층 이상 차이나는곳에도 전달이 가능하도록 해주는 옵션
