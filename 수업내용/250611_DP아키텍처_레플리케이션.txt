@@ -404,5 +404,7 @@ vrrp_instance VRRP1 {
     }
 }
 
+워크벤치에서 master db서버 id 확인 후 backup db서버 id 확인해보기
+show variables like 'server_id';
 
 
