@@ -1,0 +1,162 @@
+프론트 쪽에 html 만들어야함
+
+select 문제는 as쓰고 join
+
+
+-----------------------------
+
+SQL 성능 업
+-> 서버를 늘리면 해결가능하지만 시스템 자원에는 한계가 있다.
+
+뷰			그닥
+저장프로시저	실제로 많이 사용
+인덱스		성능에 큰 영향
+
+뷰 
+- 하나 이상의 테이블로부터 유도되어 만들어진 가상 테이블
+- 실행 시간에만 구체화 되는 특수한 테이블
+- 다른 테이블이나 다른 뷰에 저장되어있는 데이터를 보여주는 역할만을 수행
+- 실제 테이블처럼 행과 열을 가지지만, 실제 데이터를 저장하는 것은 아니다.
+
+필요한 컬럼만 모아둔 가상 테이블을 만들어서 조회하면 성능 업
+
+
+장점
+- 복잡한 쿼리를 단순화
+- 쿼리 재사용 가능
+- 특정 사용자에게 테이블 전체가 아닌 필요한 부분만을 보여주는 것이 가능
+
+단점
+- 삽입, 삭제, 수정 작업에 많은 제한 사항이 있다.
+- 자신만의 인덱스를 가질 수 없다.
+
+------------------------------
+저장프로시저
+- 하나의 트랜잭션에 여러 sql
+
+select * from user;
+
+최적화
+
+컴파일		sp(저장 프로시저)
+		
+실행			실행
+
+여기서 저장 프로시저는 최적화 + 컴파일 까지 미리 만들어둔것
+
+컴파일 언어 VS 인터프리터 언어
+
+컴파일 언어 : 인터프리터 언어보다 빠르다.
+	ex) C언어
+code -> 컴파일러에서 컴파일 -> 
+
+자바는 반반임 - java.exe : 인터프리터
+
+인터프리터 언어 : 컴파일 언어보다 느리다.
+	ex) 파이썬
+
+저장프로시저 문법
+
+DELIMITER $$
+CREATE PROCEDURE SP이름 (IN 또는 OUT 속성)
+BEGIN
+	저장할 SQL
+END $$
+
+
+# 실습
+CREATE TABLE member
+(
+	idx int auto_increment primary key,
+	email varchar(30),
+	nickname varchar(20),
+	createdAt datetime
+);
+
+DELIMITER $$
+CREATE PROCEDURE SP_SELECT_MEMBER ()
+BEGIN
+	SELECT * FROM member;
+END $$
+
+CALL SP_SELECT_MEMBER();
+
+만약 조건이 필요할 때
+
+insert into member (idx, email, nickname, createdAt) values 
+(1, 'hjb753357@naver.com', 'hjb', now()),
+(2, 'test2@naver.com', 'hjb', now()),
+(3, 'test3@naver.com', 'hjb', now()),
+(4, 'test4@naver.com', 'hjb', now());
+
+DELIMITER $$
+CREATE PROCEDURE SP_SELECT_MEMBER_WITH_WHERE (IN memberIdx INT)
+BEGIN
+	SELECT * FROM member where member.idx=memberIdx;
+END $$
+
+CALL SP_SELECT_MEMBER_WITH_WHERE(1);
+
+
+--------------------------------
+# 인덱스 (색인, 목차)
+# 테이블에서 데이터를 빠르게 검색할 수 있도록 만들어진 데이터 구조
+# 배열, 스택, 큐, 데크, 연결 리스트, 트리(BST- 이진탐색트리, AVL, 레드블랙, B트리, B+트리), 정렬
+
+인덱스는 트리구조로 만든다. 
+
+SET profiling = 1;
+SHOW PROFILES; # 실행했던 SQL의 실행 시간 표시
+SELECT * FROM member;
+SHOW PROFILE FOR QUERY 6; # 실행했던 쿼리 아이디를 조회
+
+EXPLAIN SELECT * FROM member; # SQL 실행 계획 표시
+# id : SELECT 문의 고유 ID
+# select_type : 쿼리의 타입 (SIMPLE, PRIMARY, SUBQUERY 등)
+# table : 접근하는 테이블 이름
+# type : 조인 방식
+# possible_keys : 사용 가능한 인덱스 목록
+# key : 사용한 인덱스
+# key_len : 사용된 인덱스의 길이
+# ref : 어떤 속성을 기준으로 인덱스가 사용되었는지 표시
+# rows : 예상 스캔 행의 수
+# Extra : 추가적인 정보
+
+INSERT member (email, nickname, createdAt)
+SELECT 
+CONCAT('test', n),
+CONCAT('test', n, '@test.com'),
+NOW() FROM
+(WITH RECURSIVE seq AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n+1 FROM seq WHERE n < 1000
+)
+SELECT * FROM seq) AS a;
+
+explain select * from member where idx=1000; // rows 1
+
+explain select * from member where email = 'test1000'; // rows 1004
+
+위 두개를 비교했을때 rows가 적은게 좋은 쿼리이다.
+
+이메일을 조회할 일이 많다 -> 이메일에 인덱스를 추가해야한다.
+
+# 인덱스를 생성하는 법
+create index member_index_email on member(email);
+
+------------------------------
+인덱스 실습
+
+mockaroo.com - 랜덤 데이터 생성 사이트
+
+create table post
+(
+	idx int auto_increment primary key,
+	writerIdx int,
+	contents varchar(100),
+	createdAt datetime,
+	foreign key (writerIdx) references member(idx) 
+);
+
+
