@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <!-- 서버랑 통신할 때 사용하는 HTML -->
+    <!-- 
+        method 속성 : HTTP 요청 메소드(get, post)
+        action 속성 : 데이터를 보낼 서버의 주소
+    -->
+     <form method="get" action="../ex1.html" enctype="multipart/form-data">
+        <!-- input 태그 속성 -->
+         <!-- type 속성 : 사용자가 입력할 데이터의 형식을 지정
+            ex) text, password, file, radio, checkbox, date, email
+         -->
+
+        <!-- name 속성 : 보내는 쪽과 받는 쪽이 맞춰야하는 설정 -->
+        <input type="text">
+        <input type="password">
+        <input type="file">
+        <input type="radio">
+        <input type="checkbox">
+        <input type="date">
+        <input type="email">
+
+        <br/>
+        이메일 : <input type="text" name="email"> <br/>
+        비번 : <input type="password" name="pw"> <br/>
+        사진 : <input type="file" multiple accept="image/*"> <br/>
+        개인정보 제공 : <input type="radio" name="accept" value="동의">동의
+                        <input type="radio" name="accept" value="비동의">비동의
+                        <br>
+        점심메뉴 :
+        <input type="checkbox" name="lunch" value="치킨"> 치킨
+        <input type="checkbox" name="lunch" value="피자"> 피자
+        <input type="checkbox" name="lunch" value="삼겹살"> 삼결살
+        <br>
+        예약 날짜 : <input type="date" name="date">
+        <br>
+
+        <input type="reset" value="초기화버튼">
+        <br>
+        <!-- submit 버튼을 누르면 input 태그들에 입력한 내용을 form -->
+         <input type="submit">
+        <button>botton</button>
+     </form>
+</body>
+</html>
